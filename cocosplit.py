@@ -2,6 +2,10 @@ import json
 import argparse
 import funcy
 from sklearn.model_selection import train_test_split
+import pathlib as pl
+import os
+import shutil
+
 
 parser = argparse.ArgumentParser(description='Splits COCO annotations file into training and test sets.')
 parser.add_argument('annotations', metavar='coco_annotations', type=str,
@@ -12,6 +16,9 @@ parser.add_argument('-s', dest='split', type=float, required=True,
                     help="A percentage of a split; a number in (0, 1)")
 parser.add_argument('--having-annotations', dest='having_annotations', action='store_true',
                     help='Ignore all images without annotations. Keep only these with at least one annotation')
+parser.add_argument('-a', dest='traindir', type=str, help='Where to store the train split')
+parser.add_argument('-b', dest='testdir', type=str, help='Where to store the test split')
+parser.add_argument('-i', dest='inputdir', type=str, help='Directory where input images are')
 
 args = parser.parse_args()
 
@@ -37,13 +44,22 @@ def main(args):
 
         images_with_annotations = funcy.lmap(lambda a: int(a['image_id']), annotations)
 
+        if not os.path.exists(args.traindir):
+          pl.Path(args.traindir).mkdir(parents=True, exist_ok=True)
+        if not os.path.exists(args.testdir):
+          pl.Path(args.testdir).mkdir(parents=True, exist_ok=True)  
+
         if args.having_annotations:
             images = funcy.lremove(lambda i: i['id'] not in images_with_annotations, images)
 
         x, y = train_test_split(images, train_size=args.split)
+        save_coco(os.path.join(args.traindir,args.train), info, licenses, x, filter_annotations(annotations, x), categories)
+        save_coco(os.path.join(args.testdir,args.test), info, licenses, y, filter_annotations(annotations, y), categories) 
 
-        save_coco(args.train, info, licenses, x, filter_annotations(annotations, x), categories)
-        save_coco(args.test, info, licenses, y, filter_annotations(annotations, y), categories)
+        for file in x:
+            shutil.copy(os.path.join(args.inputdir, file["file_name"]), args.traindir)
+        for file in y:
+            shutil.copy(os.path.join(args.inputdir, file["file_name"]), args.testdir)
 
         print("Saved {} entries in {} and {} in {}".format(len(x), args.train, len(y), args.test))
 
